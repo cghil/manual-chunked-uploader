@@ -16,3 +16,5 @@ This code gives you an example of how to manual upload via chunks
 }
 
 ```
+4. Install packages: `npm install`
+5. Run it!
