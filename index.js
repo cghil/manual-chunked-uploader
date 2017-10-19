@@ -18,6 +18,13 @@ let fileContent = fs.readFileSync(config.FILE_PATH);
 // file size
 let totalSize = stats.size;
 
+function startUpload(options){
+    
+}
+
+function createSesssion(){
+}
+
 // Create the upload session
 client.files.createUploadSession(config.FOLDER_ID, totalSize, config.FILE_NAME)
     .then(session => {
@@ -34,6 +41,9 @@ client.files.createUploadSession(config.FOLDER_ID, totalSize, config.FILE_NAME)
         return uploadPartsInParallel(partsData)
     }).then(uploadData => {
         debugger;
+        uploadData.uploads.then({
+
+        })
     });
 
 let parts = [];
