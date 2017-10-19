@@ -18,33 +18,19 @@ let fileContent = fs.readFileSync(config.FILE_PATH);
 // file size
 let totalSize = stats.size;
 
-function startUpload(options){
-    
-}
+let uploadInfo = { folderId: config.FOLDER_ID, totalSize: totalSize, fileName: config.FILE_NAME };
 
-function createSesssion(){
-}
-
-// Create the upload session
-client.files.createUploadSession(config.FOLDER_ID, totalSize, config.FILE_NAME)
-    .then(session => {
-        return session;
-    }).catch(err => {
-        if (err.statusCode === 409) {
-            console.log(`Check to see if you have already uploaded file`)
-        } else {
-            console.log(`Create upload session failed: ${err}`);
-        }
-    }).then(session => {
-        return fileSlicer(session)
-    }).then(partsData => {
-        return uploadPartsInParallel(partsData)
-    }).then(uploadData => {
-        debugger;
-        uploadData.uploads.then({
-
+function createSesssion(folderId, totalSize, fileName) {
+    return client.files.createUploadSession(folderId, totalSize, fileName)
+        .then(session => {
+            return session;
+        }).catch(err => {
+            if (err.statusCode === 409) {
+                console.log('Check to see if your files has been uploaded already');
+            }
+            console.log('Create upload session failed: ${err}');
         })
-    });
+}
 
 let parts = [];
 
@@ -73,7 +59,8 @@ function fileSlicer(session) {
 }
 
 // upload parts in parallel
-// aggregates the results for each part uploaded.
+// aggregates the results for each part uploaded
+// returns sessionID and 
 function uploadPartsInParallel(data) {
     let partsToBeUploaded = data.parts;
     let sessionID = data.sessionID;
@@ -83,24 +70,19 @@ function uploadPartsInParallel(data) {
     let uploads = partsToBeUploaded.map(function(part, index) { return uploadPart(part, maxRetries, index * partSize, sessionID) });
 
     return {
-        uploads: Promise.all(uploads).then(
-            data => {
-                return data;
-            }
-        ).catch(err => {
-            console.log("Upload Cancelled!")
-            console.log(`Upload Error: ${err}`);
-        }),
+        uploadPromises: Promise.all(uploads)
+            .catch(err => {
+                console.log("Upload Cancelled!")
+                console.log(`Upload Error: ${err}`);
+            }),
         sessionID: sessionID
     }
-    // .then(parts => {
-    //     return commitUpload(sessionID, parts)
-    // })
 }
 
 // commit 
 function commitUpload(sessionID, parts) {
-    let base64EncodedSha1 = crypto.createHash('sha1').update(fileContent).digest('base64')
+    let base64EncodedSha1 = crypto.createHash('sha1').update(fileContent).digest('base64');
+    debugger;
     let partsToBeCommited = parts.map(function(part) {
         return part.part;
     })
@@ -129,3 +111,20 @@ function uploadPart(part, retries, offset, sessionID) {
             }
         })
 }
+
+function uploader(options) {
+    createSesssion(options.folderId, options.totalSize, options.fileName)
+        .then(session => {
+            return fileSlicer(session);
+        }).then(partsData => {
+            return uploadPartsInParallel(partsData);
+        }).then(uploadData => {
+            let sessionID = uploadData.sessionID;
+            return uploadData.uploadPromises
+                .then(parts => {
+                    return commitUpload(sessionID, parts);
+                })
+        })
+}
+
+uploader(uploadInfo);
