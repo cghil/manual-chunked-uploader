@@ -18,20 +18,10 @@ let fileContent = fs.readFileSync(config.FILE_PATH);
 // file size
 let totalSize = stats.size;
 
+// upload info is needed for the uploader()
 let uploadInfo = { folderId: config.FOLDER_ID, totalSize: totalSize, fileName: config.FILE_NAME };
 
-function createSesssion(folderId, totalSize, fileName) {
-    return client.files.createUploadSession(folderId, totalSize, fileName)
-        .then(session => {
-            return session;
-        }).catch(err => {
-            if (err.statusCode === 409) {
-                console.log('Check to see if your files has been uploaded already');
-            }
-            console.log('Create upload session failed: ${err}');
-        })
-}
-
+// will hold the parts in memory
 let parts = [];
 
 // slice each part from the file
@@ -45,6 +35,9 @@ function fileSlicer(session) {
     console.log('---------------------------');
 
     let position = 0;
+    // will the start splicing position (in bytes) is less than totalSize of file
+    // continue slicing file into parts
+    // push parts into memory
     while (position < totalSize) {
         let end = position + partSize;
         let part = fileContent.slice(position, end);
@@ -60,13 +53,14 @@ function fileSlicer(session) {
 
 // upload parts in parallel
 // aggregates the results for each part uploaded
-// returns sessionID and 
+// returns sessionID and the promise that handles each part
 function uploadPartsInParallel(data) {
     let partsToBeUploaded = data.parts;
     let sessionID = data.sessionID;
     let partSize = data.partSize;
     let maxRetries = 5;
-    // map each upload to 
+    
+    // map each upload to a promise because each part needs to be individually uploaded
     let uploads = partsToBeUploaded.map(function(part, index) { return uploadPart(part, maxRetries, index * partSize, sessionID) });
 
     return {
@@ -79,13 +73,15 @@ function uploadPartsInParallel(data) {
     }
 }
 
-// commit 
+// commit upload
 function commitUpload(sessionID, parts) {
+    // the sha1 for the total file
     let base64EncodedSha1 = crypto.createHash('sha1').update(fileContent).digest('base64');
-    debugger;
+    // flattening the parts object
     let partsToBeCommited = parts.map(function(part) {
         return part.part;
-    })
+    });
+
     return client.files.commitUploadSession(sessionID, base64EncodedSha1, { parts: partsToBeCommited })
         .then(response => {
             console.log('Upload commited!')
@@ -97,6 +93,8 @@ function commitUpload(sessionID, parts) {
         });
 }
 
+// upload a part
+// handles retry logic for a singular part
 function uploadPart(part, retries, offset, sessionID) {
     return client.files.uploadPart(sessionID, part, offset, totalSize)
         .then(part => {
@@ -112,6 +110,21 @@ function uploadPart(part, retries, offset, sessionID) {
         })
 }
 
+// create the upload session
+// handles 409 conflict
+function createSesssion(folderId, totalSize, fileName) {
+    return client.files.createUploadSession(folderId, totalSize, fileName)
+        .then(session => {
+            return session;
+        }).catch(err => {
+            if (err.statusCode === 409) {
+                console.log('Check to see if your file has been uploaded already');
+            }
+            console.log('Create upload session failed: ${err}');
+        })
+}
+
+// setup function for the upload
 function uploader(options) {
     createSesssion(options.folderId, options.totalSize, options.fileName)
         .then(session => {
@@ -127,4 +140,5 @@ function uploader(options) {
         })
 }
 
+// call uploader by feeding parent folder, size of file, and chosen file name
 uploader(uploadInfo);
